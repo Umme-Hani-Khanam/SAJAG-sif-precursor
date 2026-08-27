@@ -9,3 +9,4 @@ python-multipart==0.0.20
 google-genai==1.32.0
 sentence-transformers==5.1.0
 scikit-learn==1.7.2
+pypdf==6.16.2

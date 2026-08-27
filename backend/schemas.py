@@ -42,12 +42,28 @@ class SimilarReportResponse(BaseModel):
     similarity: float
 
 
+class ScoreBreakdownResponse(BaseModel):
+    potential_consequence: int
+    hazardous_energy_exposure: int
+    critical_control_failure: int
+    likelihood: int
+    historical_recurrence: int
+    total: int
+
+
 class AnalyzeResponse(BaseModel):
     sif_score: float
     risk_level: str
+    score_breakdown: ScoreBreakdownResponse
     hazard: str
+    energy_source: str
+    exposure_type: str
     unsafe_act: str
     unsafe_condition: str
+    critical_control: str
+    control_status: str
+    potential_consequence: str
+    likelihood: str
     precursor_pattern: str
     life_saving_rule: str
     similar_reports: list[SimilarReportResponse]

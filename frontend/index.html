@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SAJAG | SIF Precursor Detection</title>
+    <script>
+      window.tailwind = window.tailwind || {};
+      window.tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              slatebase: "#0b1724",
+              steel: "#12314f",
+              cyanaccent: "#4cc9f0",
+              amberaccent: "#f6ad55",
+              mintaccent: "#7dd3a7"
+            },
+            boxShadow: {
+              panel: "0 20px 45px rgba(11, 23, 36, 0.16)"
+            },
+            backgroundImage: {
+              grid:
+                "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)"
+            }
+          }
+        }
+      };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@18.3.1",
+          "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+          "htm": "https://esm.sh/htm@3.1.1"
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="/src/index.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

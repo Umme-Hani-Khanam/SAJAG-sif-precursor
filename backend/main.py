@@ -1,9 +1,11 @@
 import os
 from io import BytesIO
+import re
 
 import pandas as pd
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
 from database import Base, engine, get_db
@@ -89,6 +91,7 @@ def read_uploaded_dataframe(upload_file: UploadFile) -> pd.DataFrame:
         if extension == ".xlsx":
             return pd.read_excel(
                 BytesIO(file_bytes),
+                engine="openpyxl",
                 dtype=str,
                 keep_default_na=False,
                 na_filter=False,
@@ -115,6 +118,33 @@ def validate_required_columns(dataframe: pd.DataFrame) -> None:
                 "required_columns": REQUIRED_COLUMNS,
             },
         )
+
+
+def extract_text_from_pdf(upload_file: UploadFile) -> str:
+    extension = os.path.splitext(upload_file.filename or "")[1].lower()
+    if extension != ".pdf":
+        raise HTTPException(status_code=400, detail="Unsupported file type. Please upload a .pdf file.")
+
+    try:
+        file_bytes = upload_file.file.read()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        reader = PdfReader(BytesIO(file_bytes))
+        raw_text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        cleaned_text = re.sub(r"\s+", " ", raw_text).strip()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to read PDF: {exc}") from exc
+
+    if not cleaned_text:
+        raise HTTPException(
+            status_code=400,
+            detail="PDF text could not be extracted. Scanned/image PDFs are not supported in this prototype.",
+        )
+
+    return cleaned_text
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -166,6 +196,20 @@ def upload_reports(
         total_rows=len(dataframe.index),
         inserted=inserted,
         updated=updated,
+    )
+
+
+@app.post("/reports/upload-pdf", response_model=AnalyzeResponse)
+def upload_pdf_report(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> AnalyzeResponse:
+    extracted_text = extract_text_from_pdf(file)
+    return analyze_description(
+        description=extracted_text,
+        site="",
+        activity="",
+        stored_reports=db.query(SafetyReport).all(),
     )
 
 
