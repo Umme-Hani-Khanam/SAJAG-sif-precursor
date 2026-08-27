@@ -1,0 +1,5 @@
+backend/venv/
+backend/.env
+backend/sajag.db
+__pycache__/
+*.pyc
