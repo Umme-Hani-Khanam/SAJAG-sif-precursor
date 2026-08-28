@@ -2,18 +2,13 @@ import React from "react";
 import { html } from "../ui.js";
 import {
   uploadReports,
-  uploadPdfReport,
   getReports,
 } from "../api/reports.js";
 
-export function ReportManagement({ onPdfAnalysis }) {
+export function ReportManagement({ onReportsLoaded }) {
   const [datasetFile, setDatasetFile] = React.useState(null);
-  const [pdfFile, setPdfFile] = React.useState(null);
 
   const [uploadingDataset, setUploadingDataset] =
-    React.useState(false);
-
-  const [uploadingPdf, setUploadingPdf] =
     React.useState(false);
 
   const [datasetResult, setDatasetResult] =
@@ -53,46 +48,25 @@ export function ReportManagement({ onPdfAnalysis }) {
     }
   }
 
-  async function handlePdfUpload() {
-    if (!pdfFile) {
-      setError("Please select a PDF file first.");
-      return;
-    }
-
-    setUploadingPdf(true);
-    setError("");
-
-    try {
-      const result = await uploadPdfReport(pdfFile);
-
-      setPdfFile(null);
-
-      if (onPdfAnalysis) {
-        onPdfAnalysis(result);
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to analyze the PDF.",
-      );
-    } finally {
-      setUploadingPdf(false);
-    }
-  }
-
   async function loadReports() {
     setLoadingReports(true);
 
     try {
       const result = await getReports();
-      setReports(Array.isArray(result) ? result : []);
+      const nextReports = Array.isArray(result) ? result : [];
+      setReports(nextReports);
+      if (onReportsLoaded) {
+        onReportsLoaded(nextReports);
+      }
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
           : "Unable to load historical reports.",
       );
+      if (onReportsLoaded) {
+        onReportsLoaded([]);
+      }
     } finally {
       setLoadingReports(false);
     }
@@ -102,6 +76,8 @@ export function ReportManagement({ onPdfAnalysis }) {
     loadReports();
   }, []);
 
+  const priorityAreas = getPriorityAreas(reports);
+
   return html`
     <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="mb-6">
@@ -110,16 +86,16 @@ export function ReportManagement({ onPdfAnalysis }) {
         </p>
 
         <h2 className="mt-2 text-2xl font-semibold text-slate-900">
-          Safety Reports
+          Historical Report Base
         </h2>
 
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          Upload safety datasets, analyze PDF reports, and review historical
-          observations stored by the SAJAG backend.
+          Upload safety datasets and review the historical observations stored
+          by the SAJAG backend.
         </p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5">
 
         <!-- Dataset upload -->
 
@@ -188,42 +164,6 @@ export function ReportManagement({ onPdfAnalysis }) {
               `
             : null}
         </article>
-
-
-        <!-- PDF upload -->
-
-        <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-600">
-            PDF ANALYSIS
-          </p>
-
-          <h3 className="mt-2 text-lg font-semibold text-slate-900">
-            Analyze PDF Report
-          </h3>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Upload a text-based PDF safety report.
-          </p>
-
-          <input
-            type="file"
-            accept=".pdf"
-            className="mt-4 block w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600"
-            onChange=${(event) =>
-              setPdfFile(event.target.files?.[0] || null)}
-          />
-
-          <button
-            type="button"
-            disabled=${uploadingPdf}
-            onClick=${handlePdfUpload}
-            className="mt-4 rounded-xl bg-cyan-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            ${uploadingPdf
-              ? "Analyzing PDF..."
-              : "Analyze PDF"}
-          </button>
-        </article>
       </div>
 
 
@@ -269,7 +209,7 @@ export function ReportManagement({ onPdfAnalysis }) {
           : reports.length === 0
             ? html`
                 <div className="mt-5 rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-                  No historical reports available.
+                  No historical reports have been loaded yet.
                 </div>
               `
             : html`
@@ -319,6 +259,82 @@ export function ReportManagement({ onPdfAnalysis }) {
                 </div>
               `}
       </div>
+
+      ${priorityAreas.sites.length > 0 || priorityAreas.activities.length > 0
+        ? html`
+            <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-600">
+                HSE PRIORITY AREAS
+              </p>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                ${priorityAreas.sites.length > 0
+                  ? html`
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-900">
+                          Top sites by precursor density
+                        </h4>
+                        <div className="mt-3 space-y-2">
+                          ${priorityAreas.sites.map(
+                            (item) => html`
+                              <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3">
+                                <span className="text-sm text-slate-700">${item.name}</span>
+                                <span className="text-sm font-semibold text-slate-900">${item.count}</span>
+                              </div>
+                            `,
+                          )}
+                        </div>
+                      </div>
+                    `
+                  : null}
+
+                ${priorityAreas.activities.length > 0
+                  ? html`
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-900">
+                          Top activities by precursor density
+                        </h4>
+                        <div className="mt-3 space-y-2">
+                          ${priorityAreas.activities.map(
+                            (item) => html`
+                              <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3">
+                                <span className="text-sm text-slate-700">${item.name}</span>
+                                <span className="text-sm font-semibold text-slate-900">${item.count}</span>
+                              </div>
+                            `,
+                          )}
+                        </div>
+                      </div>
+                    `
+                  : null}
+              </div>
+            </div>
+          `
+        : null}
     </section>
   `;
+}
+
+function getPriorityAreas(reports) {
+  return {
+    sites: rankValues(reports, (report) => report.site || report.location_site),
+    activities: rankValues(reports, (report) => report.activity),
+  };
+}
+
+function rankValues(reports, pickValue) {
+  const counts = new Map();
+
+  for (const report of reports) {
+    const value = String(pickValue(report) || "").trim();
+    if (!value) {
+      continue;
+    }
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+
+  return Array.from(counts.entries())
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([name, count]) => ({ name, count }));
 }

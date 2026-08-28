@@ -40,6 +40,9 @@ class SimilarReportResponse(BaseModel):
     report_id: str
     description: str
     similarity: float
+    date: str = ""
+    site: str = ""
+    activity: str = ""
 
 
 class ScoreBreakdownResponse(BaseModel):

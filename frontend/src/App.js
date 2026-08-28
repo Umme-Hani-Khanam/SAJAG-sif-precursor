@@ -1,5 +1,6 @@
 import React from "react";
 import { analyzeObservation } from "./api/analyze.js";
+import { getReports, uploadPdfReport } from "./api/reports.js";
 import { html } from "./ui.js";
 
 import { AnalysisResults } from "./components/AnalysisResults.js";
@@ -14,6 +15,10 @@ const sampleObservation =
 export function App() {
   const [description, setDescription] =
     React.useState(sampleObservation);
+  const [inputMode, setInputMode] =
+    React.useState("text");
+  const [pdfFile, setPdfFile] =
+    React.useState(null);
 
   const [site, setSite] = React.useState("");
 
@@ -28,6 +33,35 @@ export function App() {
 
   const [isLoading, setIsLoading] =
     React.useState(false);
+  const [isPdfLoading, setIsPdfLoading] =
+    React.useState(false);
+  const [pdfError, setPdfError] =
+    React.useState("");
+  const [historicalReportCount, setHistoricalReportCount] =
+    React.useState(0);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    async function loadHistoricalCount() {
+      try {
+        const reports = await getReports();
+        if (isMounted) {
+          setHistoricalReportCount(Array.isArray(reports) ? reports.length : 0);
+        }
+      } catch {
+        if (isMounted) {
+          setHistoricalReportCount(0);
+        }
+      }
+    }
+
+    loadHistoricalCount();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   async function runAnalysis(
     observation = description,
@@ -67,22 +101,48 @@ export function App() {
     }
   }
 
+  async function handlePdfSubmit(event) {
+    if (event) {
+      event.preventDefault();
+    }
+
+    if (!pdfFile) {
+      setPdfError("Please select a PDF report before starting analysis.");
+      return;
+    }
+
+    setIsPdfLoading(true);
+    setPdfError("");
+    setApiError("");
+
+    try {
+      const result = await uploadPdfReport(pdfFile);
+
+      setAnalysisResult(result);
+      setPdfFile(null);
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    } catch (error) {
+      setAnalysisResult(null);
+      setPdfError(
+        error instanceof Error
+          ? error.message
+          : "Unable to analyze the uploaded PDF right now.",
+      );
+    } finally {
+      setIsPdfLoading(false);
+    }
+  }
+
   async function handleSubmit(event) {
     if (event) {
       event.preventDefault();
     }
 
     await runAnalysis();
-  }
-
-  function handlePdfAnalysis(result) {
-    setApiError("");
-    setAnalysisResult(result);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
   }
 
   return html`
@@ -99,13 +159,27 @@ export function App() {
 
           <${ObservationForm}
             description=${description}
+            inputMode=${inputMode}
             site=${site}
             activity=${activity}
             isLoading=${isLoading}
+            isPdfLoading=${isPdfLoading}
+            pdfFileName=${pdfFile?.name || ""}
+            pdfError=${pdfError}
             onChange=${setDescription}
+            onModeChange=${(mode) => {
+              setInputMode(mode);
+              setApiError("");
+              setPdfError("");
+            }}
+            onPdfSelect=${(file) => {
+              setPdfFile(file);
+              setPdfError("");
+            }}
             onSiteChange=${setSite}
             onActivityChange=${setActivity}
             onSubmit=${handleSubmit}
+            onPdfSubmit=${handlePdfSubmit}
           />
 
 
@@ -127,10 +201,10 @@ export function App() {
                 </p>
               </div>
 
-              ${isLoading
+              ${isLoading || isPdfLoading
                 ? html`
                     <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-medium text-cyan-700">
-                      Analyzing...
+                      ${isPdfLoading ? "Analyzing PDF..." : "Analyzing..."}
                     </span>
                   `
                 : null}
@@ -154,6 +228,7 @@ export function App() {
               ? html`
                   <${AnalysisResults}
                     result=${analysisResult}
+                    historicalReportCount=${historicalReportCount}
                   />
                 `
               : html`
@@ -168,7 +243,8 @@ export function App() {
         <!-- REPORT MANAGEMENT -->
 
         <${ReportManagement}
-          onPdfAnalysis=${handlePdfAnalysis}
+          onReportsLoaded=${(reports) =>
+            setHistoricalReportCount(Array.isArray(reports) ? reports.length : 0)}
         />
 
       </div>

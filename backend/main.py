@@ -1,5 +1,6 @@
 import os
 from io import BytesIO
+from pathlib import Path
 import re
 from collections import Counter
 
@@ -9,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
-from database import Base, engine, get_db
+from database import Base, SessionLocal, engine, get_db
 from models import SafetyReport
 # from schemas import HealthResponse, SafetyReportResponse, UploadResponse
 # from schemas import AnalyzeRequest, AnalyzeResponse
@@ -25,6 +26,7 @@ from intelligence import analyze_description
 
 
 APP_NAME = os.getenv("APP_NAME", "SAJAG Phase 1 API")
+DEFAULT_DATASET_PATH = Path(__file__).resolve().parent.parent / "data" / "safety_reports.xlsx"
 
 REQUIRED_COLUMNS = [
     "Report ID",
@@ -79,6 +81,35 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
+    seed_default_dataset()
+
+
+def seed_default_dataset() -> None:
+    if not DEFAULT_DATASET_PATH.exists():
+        return
+
+    db = SessionLocal()
+    try:
+        existing_count = db.query(SafetyReport).count()
+        if existing_count > 0:
+            return
+
+        dataframe = pd.read_excel(
+            DEFAULT_DATASET_PATH,
+            engine="openpyxl",
+            dtype=str,
+            keep_default_na=False,
+            na_filter=False,
+        )
+        validate_required_columns(dataframe)
+
+        for row in dataframe[REQUIRED_COLUMNS].to_dict(orient="records"):
+            payload = {COLUMN_MAPPING[column]: value for column, value in row.items()}
+            db.add(SafetyReport(**payload))
+
+        db.commit()
+    finally:
+        db.close()
 
 
 def read_uploaded_dataframe(upload_file: UploadFile) -> pd.DataFrame:

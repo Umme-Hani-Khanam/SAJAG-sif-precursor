@@ -17,7 +17,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 load_dotenv(Path(__file__).with_name(".env"))
 ENV_FILE = Path(__file__).with_name(".env")
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-3.6-flash"
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 _ANALYSIS_FIELDS = (
     "hazard",
@@ -32,6 +32,7 @@ _ANALYSIS_FIELDS = (
     "precursor_pattern",
     "life_saving_rule",
 )
+MAX_ANALYSIS_CHARACTERS = 12000
 _gemini_client: genai.Client | None = None
 _embedding_model: SentenceTransformer | None = None
 
@@ -58,6 +59,26 @@ def _embedder() -> SentenceTransformer:
     if _embedding_model is None:
         _embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     return _embedding_model
+
+
+def _prepare_description(description: str) -> str:
+    normalized = re.sub(r"\s+", " ", str(description or "")).strip()
+    if len(normalized) <= MAX_ANALYSIS_CHARACTERS:
+        return normalized
+    return normalized[:MAX_ANALYSIS_CHARACTERS].rsplit(" ", 1)[0].strip()
+
+
+def _friendly_gemini_error(exc: Exception) -> str:
+    message = str(exc)
+    lowered = message.lower()
+
+    if "429" in lowered or "resource_exhausted" in lowered or "quota" in lowered:
+        return (
+            "Gemini is temporarily rate limited for this request. "
+            "Please wait a moment and retry the analysis."
+        )
+
+    return f"Gemini analysis failed: {message}"
 
 
 def gemini_analysis(description: str) -> dict[str, str]:
@@ -91,7 +112,7 @@ Requirements:
     except IntelligenceError:
         raise
     except Exception as exc:
-        raise IntelligenceError(f"Gemini analysis failed: {exc}") from exc
+        raise IntelligenceError(_friendly_gemini_error(exc)) from exc
 
     return {field: str(parsed.get(field, "")).strip() for field in _ANALYSIS_FIELDS}
 
@@ -114,6 +135,9 @@ def _similar_reports(description: str, stored_reports: list[Any], analysis: dict
     return [
         {
             "report_id": str(stored_reports[index].report_id),
+            "date": str(getattr(stored_reports[index], "date", "") or ""),
+            "site": str(getattr(stored_reports[index], "site", "") or ""),
+            "activity": str(getattr(stored_reports[index], "activity", "") or ""),
             "description": str(stored_reports[index].description),
             "similarity": round(float(scores[index]), 4),
         }
@@ -350,6 +374,8 @@ def _score_breakdown(
 
 
 def _risk_level(score: int) -> str:
+    if score >= 85:
+        return "critical"
     if score >= 70:
         return "high"
     if score >= 40:
@@ -363,12 +389,14 @@ def analyze_description(
     activity: str,
     stored_reports: list[Any],
 ) -> dict[str, Any]:
-    if not description.strip():
+    prepared_description = _prepare_description(description)
+
+    if not prepared_description:
         raise HTTPException(status_code=400, detail="Description must not be empty.")
     try:
-        analysis = gemini_analysis(description)
-        similar_reports = _similar_reports(description, stored_reports, analysis)
-        _cluster_label(description, stored_reports, analysis)
+        analysis = gemini_analysis(prepared_description)
+        similar_reports = _similar_reports(prepared_description, stored_reports, analysis)
+        _cluster_label(prepared_description, stored_reports, analysis)
         _site_activity_rankings(stored_reports)
         score_breakdown = _score_breakdown(analysis, similar_reports)
     except IntelligenceError as exc:
