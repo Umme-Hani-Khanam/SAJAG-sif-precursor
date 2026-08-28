@@ -1,38 +1,66 @@
 import { html } from "../ui.js";
 
 function getRiskStyles(level) {
-  const normalized = String(level).toLowerCase();
+  const normalized = String(level || "").toLowerCase();
 
   if (normalized === "high") {
-    return "border-red-400/30 bg-red-500/15 text-red-100";
+    return "border-red-200 bg-red-50 text-red-700";
   }
 
   if (normalized === "medium") {
-    return "border-amberaccent/30 bg-amberaccent/15 text-amber-100";
+    return "border-amber-200 bg-amber-50 text-amber-700";
   }
 
-  return "border-mintaccent/30 bg-mintaccent/15 text-emerald-100";
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
 }
 
 export function ScoreHighlights({ sifScore, riskLevel }) {
   return html`
     <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-      <article className="rounded-[2rem] border border-cyanaccent/20 bg-gradient-to-br from-cyanaccent/20 to-white/5 p-6 shadow-panel">
-        <p className="text-sm uppercase tracking-[0.25em] text-cyan-100/80">
-          SIF Score
+
+      <article className="rounded-[1.75rem] border border-cyan-100 bg-cyan-50/50 p-6">
+
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-700">
+          SIF SCORE
         </p>
-        <div className="mt-4 flex items-end gap-3">
-          <span className="text-6xl font-semibold text-white">
+
+        <div className="mt-3 flex items-end gap-3">
+          <span className="text-6xl font-bold text-slate-900">
             ${Math.round(Number(sifScore) || 0)}
           </span>
-          <span className="pb-2 text-lg text-cyan-100">/100</span>
+
+          <span className="pb-2 text-lg text-slate-500">
+            /100
+          </span>
         </div>
+
+        <p className="mt-2 text-sm text-slate-500">
+          Serious Injury and Fatality precursor risk score
+        </p>
+
       </article>
 
-      <article className=${`rounded-[2rem] border p-6 shadow-panel ${getRiskStyles(riskLevel)}`}>
-        <p className="text-sm uppercase tracking-[0.25em]">Risk Level</p>
-        <p className="mt-5 text-4xl font-semibold capitalize">${riskLevel || "Unknown"}</p>
+
+      <article
+        className=${`rounded-[1.75rem] border p-6 ${getRiskStyles(
+          riskLevel,
+        )}`}
+      >
+
+        <p className="text-xs font-semibold uppercase tracking-[0.25em]">
+          RISK LEVEL
+        </p>
+
+        <p className="mt-4 text-4xl font-bold capitalize">
+          ${riskLevel || "Unknown"}
+        </p>
+
+        <p className="mt-2 text-sm opacity-80">
+          Based on the current safety observation
+        </p>
+
       </article>
+
     </section>
   `;
 }

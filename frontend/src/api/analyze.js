@@ -25,16 +25,28 @@ function normalizeErrorMessage(errorPayload, fallbackMessage) {
   return fallbackMessage;
 }
 
-export async function analyzeObservation(description) {
-  const response = await fetch(`${resolveApiBaseUrl()}/analyze`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+export async function analyzeObservation(
+  description,
+  site = "",
+  activity = "",
+) {
+  const response = await fetch(
+    `${resolveApiBaseUrl()}/analyze`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        description,
+        site,
+        activity,
+      }),
     },
-    body: JSON.stringify({ description }),
-  });
+  );
 
   let payload = null;
+
   try {
     payload = await response.json();
   } catch {

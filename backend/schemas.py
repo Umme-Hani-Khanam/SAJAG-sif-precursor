@@ -69,3 +69,14 @@ class AnalyzeResponse(BaseModel):
     similar_reports: list[SimilarReportResponse]
     site: str
     activity: str
+
+class DatasetAnalysisResponse(BaseModel):
+    total_reports: int
+    high_risk: int
+    medium_risk: int
+    low_risk: int
+    average_sif_score: float
+    top_sites: list[dict]
+    top_activities: list[dict]
+    report_types: list[dict]
+    departments: list[dict]

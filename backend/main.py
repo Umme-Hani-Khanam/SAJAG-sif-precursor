@@ -1,6 +1,7 @@
 import os
 from io import BytesIO
 import re
+from collections import Counter
 
 import pandas as pd
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
@@ -10,8 +11,16 @@ from sqlalchemy.orm import Session
 
 from database import Base, engine, get_db
 from models import SafetyReport
-from schemas import HealthResponse, SafetyReportResponse, UploadResponse
-from schemas import AnalyzeRequest, AnalyzeResponse
+# from schemas import HealthResponse, SafetyReportResponse, UploadResponse
+# from schemas import AnalyzeRequest, AnalyzeResponse
+from schemas import (
+    HealthResponse,
+    SafetyReportResponse,
+    UploadResponse,
+    AnalyzeRequest,
+    AnalyzeResponse,
+    DatasetAnalysisResponse,
+)
 from intelligence import analyze_description
 
 
