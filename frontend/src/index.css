@@ -1,6 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
-  color: #d9e7f5;
-  background: #07111d;
+  color: #0f172a;
+  background: #f8fafc;
   font-family:
     "Segoe UI",
     "Helvetica Neue",
@@ -16,7 +20,7 @@
 
 html {
   min-width: 320px;
-  background: #07111d;
+  background: #f8fafc;
 }
 
 body {
@@ -24,29 +28,13 @@ body {
   min-width: 320px;
   min-height: 100vh;
 
-  background:
-    radial-gradient(
-      circle at 50% -10%,
-      rgba(76, 201, 240, 0.14),
-      transparent 35%
-    ),
-    radial-gradient(
-      circle at 100% 50%,
-      rgba(18, 49, 79, 0.35),
-      transparent 35%
-    ),
-    linear-gradient(
-      135deg,
-      #050d16 0%,
-      #091827 50%,
-      #07111d 100%
-    );
-
-  background-attachment: fixed;
+  background: #f8fafc;
 }
 
 button,
-textarea {
+textarea,
+input,
+select {
   font-family: inherit;
 }
 
@@ -69,5 +57,62 @@ textarea {
 
 ::selection {
   background: rgba(76, 201, 240, 0.35);
-  color: #f8fbff;
+  color: #0f172a;
 }
+
+.panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  background: white;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.metric-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  background: white;
+  padding: 1rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.eyebrow {
+  margin: 0;
+  color: #0891b2;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.primary-button,
+.secondary-button {
+  display: inline-flex;
+  min-height: 2.6rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: 150ms ease;
+}
+
+.primary-button { border: 1px solid #0f172a; background: #0f172a; color: white; }
+.primary-button:hover { background: #1e293b; }
+.secondary-button { border: 1px solid #cbd5e1; background: white; color: #334155; }
+.secondary-button:hover { background: #f8fafc; }
+.primary-button:disabled, .secondary-button:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.filter-label { display: block; margin-bottom: 0.35rem; color: #64748b; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.filter-control { display: block; width: 100%; min-height: 2.55rem; border: 1px solid #cbd5e1; border-radius: 0.75rem; background: white; padding: 0.55rem 0.7rem; color: #0f172a; font-size: 0.85rem; outline: none; }
+.filter-control:focus { border-color: #22d3ee; box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15); }
+
+.data-table { min-width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem; }
+.data-table th { background: #f8fafc; color: #475569; font-weight: 700; white-space: nowrap; }
+.data-table th, .data-table td { border-bottom: 1px solid #e2e8f0; padding: 0.75rem; vertical-align: top; }
+
+.error-box { border: 1px solid #fecaca; border-radius: 0.8rem; background: #fef2f2; padding: 0.8rem 1rem; color: #b91c1c; font-size: 0.875rem; }
+.status-pill { display: inline-flex; border: 1px solid #a5f3fc; border-radius: 999px; background: #ecfeff; padding: 0.3rem 0.7rem; color: #0e7490; font-size: 0.75rem; font-weight: 700; }
+.meta-pill { border-radius: 999px; background: white; padding: 0.25rem 0.65rem; }

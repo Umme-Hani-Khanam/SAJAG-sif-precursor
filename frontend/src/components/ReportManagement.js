@@ -1,340 +1,52 @@
 import React from "react";
+import { downloadReportsCsv, getAnalysisStatus, getReports, uploadReports } from "../api/reports.js";
+import { getJobs, startHistoricalJob } from "../api/phase3.js";
 import { html } from "../ui.js";
-import {
-  uploadReports,
-  getReports,
-} from "../api/reports.js";
+import { getReviewedAnalysis, submitReview } from "../api/governance.js";
 
-export function ReportManagement({ onReportsLoaded }) {
-  const [datasetFile, setDatasetFile] = React.useState(null);
-
-  const [uploadingDataset, setUploadingDataset] =
-    React.useState(false);
-
-  const [datasetResult, setDatasetResult] =
-    React.useState(null);
-
+export function ReportManagement({ onReportsLoaded, actor }) {
+  const [file, setFile] = React.useState(null); const [uploading, setUploading] = React.useState(false);
+  const [analyzing, setAnalyzing] = React.useState(false); const [result, setResult] = React.useState(null);
+  const [reports, setReports] = React.useState([]); const [status, setStatus] = React.useState({ total_reports: 0, analysed: 0, pending: 0, failed: 0 });
+  const [filters, setFilters] = React.useState({ date_from: "", date_to: "", site: "", department: "", activity: "", risk_level: "", precursor: "", cluster_id: "" });
   const [error, setError] = React.useState("");
+  const [selected, setSelected] = React.useState(null);
+  const [reviewNote, setReviewNote] = React.useState("");
+  const [correctedHazard, setCorrectedHazard] = React.useState("");
+  const [job, setJob] = React.useState(null);
 
-  const [reports, setReports] = React.useState([]);
-  const [loadingReports, setLoadingReports] =
-    React.useState(false);
-
-  async function handleDatasetUpload() {
-    if (!datasetFile) {
-      setError("Please select a CSV or XLSX file first.");
-      return;
-    }
-
-    setUploadingDataset(true);
-    setError("");
-    setDatasetResult(null);
-
-    try {
-      const result = await uploadReports(datasetFile);
-
-      setDatasetResult(result);
-      setDatasetFile(null);
-
-      await loadReports();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to upload the dataset.",
-      );
-    } finally {
-      setUploadingDataset(false);
-    }
+  async function load(activeFilters = filters) {
+    try { const [rows, nextStatus] = await Promise.all([getReports(activeFilters), getAnalysisStatus()]); setReports(rows); setStatus(nextStatus); onReportsLoaded?.(rows); setError(""); }
+    catch (err) { setError(err.message); }
   }
+  React.useEffect(() => { load(); const timer = window.setInterval(async () => { try { const active = (await getJobs()).find((item) => item.job_type === "HISTORICAL_ANALYSIS"); setJob(active || null); if (active?.status === "completed") await load(); } catch {} }, 2500); return () => window.clearInterval(timer); }, []);
 
-  async function loadReports() {
-    setLoadingReports(true);
-
-    try {
-      const result = await getReports();
-      const nextReports = Array.isArray(result) ? result : [];
-      setReports(nextReports);
-      if (onReportsLoaded) {
-        onReportsLoaded(nextReports);
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load historical reports.",
-      );
-      if (onReportsLoaded) {
-        onReportsLoaded([]);
-      }
-    } finally {
-      setLoadingReports(false);
-    }
+  async function handleUpload() {
+    if (!file) { setError("Please select a CSV or XLSX file first."); return; }
+    setUploading(true); setError("");
+    try { setResult(await uploadReports(file)); setFile(null); await load(); } catch (err) { setError(err.message); } finally { setUploading(false); }
   }
+  async function handleAnalysis() {
+    setAnalyzing(true); setError("");
+    try { const next = await startHistoricalJob(); setJob(next); setResult(null); } catch (err) { setError(err.message); } finally { setAnalyzing(false); }
+  }
+  async function openReview(reportId) { try { const value = await getReviewedAnalysis(reportId); setSelected(value); setCorrectedHazard(value.ai_analysis?.hazard || ""); setError(""); } catch (err) { setError(err.message); } }
+  async function review(decision) { try { await submitReview(selected.report_id, { decision, review_note: reviewNote, ...(decision === "corrected" ? { reviewed_hazard: correctedHazard } : {}) }); await openReview(selected.report_id); setReviewNote(""); await load(); } catch (err) { setError(err.message); } }
+  const fields = [["date_from", "From", "date"], ["date_to", "To", "date"], ["site", "Site", "text"], ["department", "Department", "text"], ["activity", "Activity", "text"], ["precursor", "Precursor", "text"]];
 
-  React.useEffect(() => {
-    loadReports();
-  }, []);
-
-  const priorityAreas = getPriorityAreas(reports);
-
-  return html`
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-600">
-          REPORT MANAGEMENT
-        </p>
-
-        <h2 className="mt-2 text-2xl font-semibold text-slate-900">
-          Historical Report Base
-        </h2>
-
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          Upload safety datasets and review the historical observations stored
-          by the SAJAG backend.
-        </p>
-      </div>
-
-      <div className="grid gap-5">
-
-        <!-- Dataset upload -->
-
-        <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-600">
-            DATASET
-          </p>
-
-          <h3 className="mt-2 text-lg font-semibold text-slate-900">
-            Upload Safety Reports
-          </h3>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Supported formats: CSV and XLSX
-          </p>
-
-          <input
-            type="file"
-            accept=".csv,.xlsx"
-            className="mt-4 block w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600"
-            onChange=${(event) =>
-              setDatasetFile(event.target.files?.[0] || null)}
-          />
-
-          <button
-            type="button"
-            disabled=${uploadingDataset}
-            onClick=${handleDatasetUpload}
-            className="mt-4 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            ${uploadingDataset
-              ? "Uploading..."
-              : "Upload Dataset"}
-          </button>
-
-          ${datasetResult
-            ? html`
-                <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="text-sm font-semibold text-emerald-800">
-                    Upload successful
-                  </p>
-
-                  <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                    <div>
-                      <p className="text-lg font-bold text-slate-900">
-                        ${datasetResult.total_rows}
-                      </p>
-                      <p className="text-xs text-slate-500">Rows</p>
-                    </div>
-
-                    <div>
-                      <p className="text-lg font-bold text-slate-900">
-                        ${datasetResult.inserted}
-                      </p>
-                      <p className="text-xs text-slate-500">Inserted</p>
-                    </div>
-
-                    <div>
-                      <p className="text-lg font-bold text-slate-900">
-                        ${datasetResult.updated}
-                      </p>
-                      <p className="text-xs text-slate-500">Updated</p>
-                    </div>
-                  </div>
-                </div>
-              `
-            : null}
-        </article>
-      </div>
-
-
-      ${error
-        ? html`
-            <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              ${error}
-            </div>
-          `
-        : null}
-
-
-      <!-- Historical reports -->
-
-      <div className="mt-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">
-              Historical Reports
-            </h3>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Reports currently stored in the backend database.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick=${loadReports}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Refresh
-          </button>
-        </div>
-
-
-        ${loadingReports
-          ? html`
-              <p className="mt-5 text-sm text-slate-500">
-                Loading reports...
-              </p>
-            `
-          : reports.length === 0
-            ? html`
-                <div className="mt-5 rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-                  No historical reports have been loaded yet.
-                </div>
-              `
-            : html`
-                <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="bg-slate-50">
-                      <tr>
-                        <th className="px-4 py-3 font-semibold text-slate-700">
-                          Report ID
-                        </th>
-                        <th className="px-4 py-3 font-semibold text-slate-700">
-                          Date
-                        </th>
-                        <th className="px-4 py-3 font-semibold text-slate-700">
-                          Site
-                        </th>
-                        <th className="px-4 py-3 font-semibold text-slate-700">
-                          Activity
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody className="divide-y divide-slate-100">
-                      ${reports.slice(0, 20).map(
-                        (report) => html`
-                          <tr key=${report.report_id}>
-                            <td className="px-4 py-3 font-medium text-slate-900">
-                              ${report.report_id}
-                            </td>
-
-                            <td className="px-4 py-3 text-slate-600">
-                              ${report.date}
-                            </td>
-
-                            <td className="px-4 py-3 text-slate-600">
-                              ${report.site || report.location_site || "—"}
-                            </td>
-
-                            <td className="px-4 py-3 text-slate-600">
-                              ${report.activity || "—"}
-                            </td>
-                          </tr>
-                        `,
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              `}
-      </div>
-
-      ${priorityAreas.sites.length > 0 || priorityAreas.activities.length > 0
-        ? html`
-            <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-600">
-                HSE PRIORITY AREAS
-              </p>
-
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                ${priorityAreas.sites.length > 0
-                  ? html`
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-900">
-                          Top sites by precursor density
-                        </h4>
-                        <div className="mt-3 space-y-2">
-                          ${priorityAreas.sites.map(
-                            (item) => html`
-                              <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3">
-                                <span className="text-sm text-slate-700">${item.name}</span>
-                                <span className="text-sm font-semibold text-slate-900">${item.count}</span>
-                              </div>
-                            `,
-                          )}
-                        </div>
-                      </div>
-                    `
-                  : null}
-
-                ${priorityAreas.activities.length > 0
-                  ? html`
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-900">
-                          Top activities by precursor density
-                        </h4>
-                        <div className="mt-3 space-y-2">
-                          ${priorityAreas.activities.map(
-                            (item) => html`
-                              <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3">
-                                <span className="text-sm text-slate-700">${item.name}</span>
-                                <span className="text-sm font-semibold text-slate-900">${item.count}</span>
-                              </div>
-                            `,
-                          )}
-                        </div>
-                      </div>
-                    `
-                  : null}
-              </div>
-            </div>
-          `
-        : null}
+  return html`<div className="space-y-6">
+    <section className="grid gap-5 lg:grid-cols-2">
+      <article className="panel"><p className="eyebrow">DATASET IMPORT</p><h2 className="mt-2 text-xl font-semibold">Add or update source reports</h2><p className="mt-2 text-sm text-slate-500">Original rows are preserved. Unchanged report IDs are not destroyed or reinserted.</p><input type="file" accept=".csv,.xlsx" className="mt-4 block w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm" onChange=${(e) => setFile(e.target.files?.[0] || null)} /><button className="primary-button mt-4" disabled=${uploading} onClick=${handleUpload}>${uploading ? "Uploading…" : "Upload dataset"}</button></article>
+      <article className="panel"><p className="eyebrow">PERSISTED INTELLIGENCE</p><h2 className="mt-2 text-xl font-semibold">Analyse Historical Dataset</h2><p className="mt-2 text-sm text-slate-500">Runs as a persisted background job; this page remains usable while extraction and clustering continue.</p><button className="primary-button mt-4" disabled=${analyzing || ["queued", "running"].includes(job?.status) || !(status.pending + status.failed)} onClick=${handleAnalysis}>${["queued", "running"].includes(job?.status) ? "Analysis job running…" : "Start analysis job"}</button>${job ? html`<div className="mt-4"><div className="flex justify-between text-xs"><span>${job.status.replaceAll("_", " ")}</span><b>${job.progress_current} / ${job.progress_total || "?"} · ${job.progress_percent}%</b></div><div className="mt-2 h-2 rounded bg-slate-100"><div className=${`h-full rounded ${job.status === "failed" ? "bg-rose-500" : "bg-cyan-500"}`} style=${{ width: `${job.progress_percent}%` }}></div></div>${job.error ? html`<p className="mt-2 text-xs text-rose-600">${job.error}</p>` : null}</div>` : null}</article>
     </section>
-  `;
-}
-
-function getPriorityAreas(reports) {
-  return {
-    sites: rankValues(reports, (report) => report.site || report.location_site),
-    activities: rankValues(reports, (report) => report.activity),
-  };
-}
-
-function rankValues(reports, pickValue) {
-  const counts = new Map();
-
-  for (const report of reports) {
-    const value = String(pickValue(report) || "").trim();
-    if (!value) {
-      continue;
-    }
-    counts.set(value, (counts.get(value) || 0) + 1);
-  }
-
-  return Array.from(counts.entries())
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 3)
-    .map(([name, count]) => ({ name, count }));
+    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">${[["Total reports", status.total_reports], ["Analysed", status.analysed], ["Pending", status.pending], ["Failed", status.failed]].map(([l, v]) => html`<div className="metric-card" key=${l}><p className="text-3xl font-bold">${v}</p><p className="text-xs text-slate-500">${l}</p></div>`)}</section>
+    ${result ? html`<div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">Operation complete. ${result.inserted !== undefined ? `${result.inserted} inserted, ${result.updated} updated, ${result.unchanged} unchanged.` : `${result.succeeded} analysed, ${result.failed_this_run} failed; ${result.clusters} established clusters.`}</div>` : null}
+    ${error ? html`<div className="error-box">${error}</div>` : null}
+    <section className="panel"><div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"><div><p className="eyebrow">REPORTS</p><h2 className="mt-2 text-xl font-semibold">Filtered analysis records</h2></div><div className="flex gap-2"><button className="secondary-button" onClick=${() => load()}>Apply filters</button><button className="primary-button" onClick=${() => downloadReportsCsv(filters).catch((err) => setError(err.message))}>Export CSV</button></div></div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">${fields.map(([key, label, type]) => html`<label key=${key}><span className="filter-label">${label}</span><input className="filter-control" type=${type} value=${filters[key]} onChange=${(e) => setFilters({ ...filters, [key]: e.target.value })} /></label>`)}<label><span className="filter-label">Risk level</span><select className="filter-control" value=${filters.risk_level} onChange=${(e) => setFilters({ ...filters, risk_level: e.target.value })}><option value="">All</option>${["low", "medium", "high", "critical"].map((v) => html`<option key=${v} value=${v}>${v}</option>`)}</select></label><label><span className="filter-label">Cluster ID</span><input className="filter-control" type="number" min="0" value=${filters.cluster_id} onChange=${(e) => setFilters({ ...filters, cluster_id: e.target.value })} /></label></div>
+      <div className="mt-5 overflow-x-auto"><table className="data-table"><thead><tr><th>Report ID</th><th>Date</th><th>Site</th><th>Activity</th><th>Hazard / precursor</th><th>SIF</th><th>Risk</th><th>Cluster</th><th>Review</th></tr></thead><tbody>${reports.map((report) => html`<tr key=${report.report_id}><td><button className="font-semibold text-cyan-700 hover:underline" onClick=${() => openReview(report.report_id)}>${report.report_id}</button></td><td>${report.date}</td><td>${report.site || report.location_site}</td><td>${report.activity}</td><td><span className="block max-w-xs truncate">${report.analysis?.hazard || "—"}</span><span className="block max-w-xs truncate text-xs text-slate-400">${report.analysis?.precursor_pattern || "Pending analysis"}</span></td><td>${report.analysis?.sif_score ?? "—"}</td><td className="capitalize">${report.analysis?.risk_level || "—"}</td><td>${report.analysis?.cluster_id === -1 ? "Unclassified" : report.analysis?.cluster_id === null || report.analysis?.cluster_id === undefined ? "—" : `C-${Number(report.analysis.cluster_id) + 1}`}</td><td className="capitalize">${report.reviews?.length ? report.reviews[report.reviews.length - 1].review_status.replaceAll("_", " ") : report.analysis?.status === "analysed" ? "Unreviewed" : "Pending"}</td></tr>`)}</tbody></table></div>
+      ${!reports.length ? html`<p className="py-10 text-center text-sm text-slate-500">No reports match the current filters.</p>` : null}
+    </section>
+    ${selected ? html`<section className="panel"><div className="flex justify-between"><div><p className="eyebrow">REPORT REVIEW</p><h2 className="mt-2 text-xl font-semibold">${selected.report_id}</h2></div><button className="secondary-button" onClick=${() => setSelected(null)}>Close</button></div><div className="mt-4 grid gap-4 lg:grid-cols-2"><article className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold uppercase">AI Analysis · preserved</p><p className="mt-2 text-sm"><b>${selected.ai_analysis?.risk_level}</b> · ${selected.ai_analysis?.hazard}</p><p className="mt-1 text-xs text-slate-500">${selected.ai_analysis?.precursor_pattern}</p></article><article className="rounded-xl border border-violet-200 p-4"><p className="text-xs font-bold uppercase text-violet-700">HSE Reviewed Analysis</p><p className="mt-2 text-sm capitalize">${selected.review_status.replaceAll("_", " ")}</p><p className="mt-1 text-xs text-slate-500">${selected.hse_reviewed_analysis?.review_note || "No HSE decision stored."}</p></article></div>${["HSE_OFFICER", "HSE_MANAGER", "ADMIN"].includes(actor?.role) ? html`<div className="mt-4 grid gap-3 md:grid-cols-2"><label><span className="filter-label">Corrected hazard</span><input className="filter-control" value=${correctedHazard} onChange=${(e) => setCorrectedHazard(e.target.value)} /></label><label><span className="filter-label">Review note</span><input className="filter-control" value=${reviewNote} onChange=${(e) => setReviewNote(e.target.value)} /></label></div><div className="mt-3 flex flex-wrap gap-2"><button className="primary-button" onClick=${() => review("confirmed")}>Confirm Analysis</button><button className="secondary-button" onClick=${() => review("corrected")}>Correct Analysis</button><button className="secondary-button" onClick=${() => review("rejected")}>Reject Flag</button><button className="secondary-button" onClick=${() => review("needs_more_information")}>Needs More Information</button></div>` : html`<p className="mt-4 text-sm text-slate-500">Your current role is read-only for HSE review.</p>`}</section>` : null}
+  </div>`;
 }

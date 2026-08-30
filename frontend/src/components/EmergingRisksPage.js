@@ -1,0 +1,14 @@
+import React from "react";
+import { getEmergingRisks } from "../api/reports.js";
+import { html } from "../ui.js";
+import { PageTitle } from "./AnalyzePage.js";
+
+export function EmergingRisksPage() {
+  const [data, setData] = React.useState(null); const [error, setError] = React.useState("");
+  React.useEffect(() => { getEmergingRisks().then(setData).catch((err) => setError(err.message)); }, []);
+  return html`<div className="space-y-6"><${PageTitle} eyebrow="EMERGING RISKS" title="Frequency acceleration signals" subtitle="Alerts require configured evidence across time windows. SAJAG detects precursor growth; it never claims a fatality is certain." />
+    ${error ? html`<div className="error-box">${error}</div>` : null}
+    ${data ? html`<div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4 text-sm text-cyan-900">${data.disclaimer}</div>` : null}
+    ${data?.alerts?.length ? html`<div className="grid gap-5 lg:grid-cols-2">${data.alerts.map((alert) => html`<article key=${alert.cluster_id} className="rounded-3xl border border-amber-200 bg-white p-6 shadow-sm"><div className="flex justify-between"><p className="eyebrow">${alert.cluster_code}</p><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">EMERGING</span></div><h2 className="mt-3 text-xl font-bold">${alert.cluster_name}</h2><p className="mt-2 text-sm font-semibold text-amber-800">Emerging SIF precursor pattern detected</p><div className="mt-5 grid grid-cols-3 gap-2 text-center"><div><p className="text-2xl font-bold">${alert.previous_30_days}</p><p className="text-xs text-slate-500">Previous 30d</p></div><div><p className="text-2xl font-bold">${alert.last_30_days}</p><p className="text-xs text-slate-500">Current 30d</p></div><div><p className="text-2xl font-bold">${alert.growth_percent === null ? "New" : `${alert.growth_percent}%`}</p><p className="text-xs text-slate-500">Growth</p></div></div><dl className="mt-5 space-y-3 text-sm"><div><dt className="text-xs text-slate-500">Critical-control failure</dt><dd className="font-semibold">${alert.dominant_critical_control_failure}</dd></div><div><dt className="text-xs text-slate-500">Potential consequence</dt><dd className="font-semibold">${alert.potential_consequence}</dd></div><div><dt className="text-xs text-slate-500">Sites affected</dt><dd>${alert.sites_affected.join(", ")}</dd></div></dl><p className="mt-4 text-xs text-slate-500">Rule: ≥${alert.rule.minimum_current_count} in ${alert.rule.window_days} days and ≥${alert.rule.minimum_growth_percent}% acceleration. As of ${alert.as_of_date}.</p></article>`)}</div>` : data ? html`<div className="panel text-center"><p className="text-lg font-semibold">No emerging rule is currently met</p><p className="mt-2 text-sm text-slate-500">This is an evidence-based absence of alerts, not an assurance that no risk exists.</p></div>` : html`<div className="panel">Loading emerging-risk evidence…</div>`}
+  </div>`;
+}

@@ -1,13 +1,4 @@
-function resolveApiBaseUrl() {
-  const defaultUrl = "http://127.0.0.1:8000";
-
-  if (typeof window === "undefined") {
-    return defaultUrl;
-  }
-
-  const params = new URLSearchParams(window.location.search);
-  return params.get("api") || defaultUrl;
-}
+import { actorHeaders, resolveApiBaseUrl } from "./reports.js";
 
 function normalizeErrorMessage(errorPayload, fallbackMessage) {
   if (!errorPayload) {
@@ -29,6 +20,7 @@ export async function analyzeObservation(
   description,
   site = "",
   activity = "",
+  observedAt = "",
 ) {
   const response = await fetch(
     `${resolveApiBaseUrl()}/analyze`,
@@ -36,11 +28,13 @@ export async function analyzeObservation(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...actorHeaders(),
       },
       body: JSON.stringify({
         description,
         site,
         activity,
+        observed_at: observedAt || null,
       }),
     },
   );

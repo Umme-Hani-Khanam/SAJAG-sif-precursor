@@ -10,6 +10,8 @@ load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'sajag.db')}"
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+if not DATABASE_URL.startswith(("sqlite:", "postgresql:", "postgresql+")):
+    raise RuntimeError("DATABASE_URL must use sqlite:// or postgresql:// (psycopg) syntax.")
 
 engine = create_engine(
     DATABASE_URL,

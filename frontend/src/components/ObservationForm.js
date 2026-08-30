@@ -5,21 +5,28 @@ export function ObservationForm({
   inputMode,
   site,
   activity,
+  observedAt,
   isLoading,
   isPdfLoading,
   pdfFileName,
   pdfError,
+  photoFileName,
+  photoError,
+  isPhotoLoading,
   onChange,
   onModeChange,
   onPdfSelect,
   onSiteChange,
   onActivityChange,
+  onObservedAtChange,
+  onPhotoSelect,
+  onPhotoSubmit,
   onSubmit,
   onPdfSubmit,
 }) {
   return html`
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
-      
+
       <div className="mb-6">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -69,6 +76,7 @@ export function ObservationForm({
         >
           Upload PDF
         </button>
+        <button type="button" onClick=${() => onModeChange("photo")} className=${`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${inputMode === "photo" ? "bg-slate-900 text-white shadow-sm" : "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"}`}>Upload Photo</button>
       </div>
 
       ${inputMode === "text"
@@ -92,7 +100,7 @@ export function ObservationForm({
                 </p>
               </label>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
 
                 <label className="block">
                   <span className="mb-2 block text-sm font-semibold text-slate-700">
@@ -107,6 +115,8 @@ export function ObservationForm({
                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-400 focus:bg-white focus:ring-4 focus:ring-cyan-100"
                   />
                 </label>
+
+                <label className="block"><span className="mb-2 block text-sm font-semibold text-slate-700">Observed at</span><input type="datetime-local" value=${observedAt} onChange=${(event) => onObservedAtChange(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm" /></label>
 
                 <label className="block">
                   <span className="mb-2 block text-sm font-semibold text-slate-700">
@@ -146,7 +156,7 @@ export function ObservationForm({
 
             </form>
           `
-        : html`
+        : inputMode === "pdf" ? html`
             <form className="space-y-5" onSubmit=${onPdfSubmit}>
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-slate-700">
@@ -167,11 +177,11 @@ export function ObservationForm({
                   </p>
 
                   <p className="mt-2 text-xs text-slate-500">
-                    Text-based PDFs only. The extracted text is sent through the
-                    same SAJAG analysis pipeline as manual observations.
+                    Native text is used when readable; scanned PDFs automatically use OCR fallback.
                   </p>
                 </div>
               </label>
+              <div className="grid gap-3 sm:grid-cols-3"><input className="filter-control" placeholder="Site" value=${site} onChange=${(e) => onSiteChange(e.target.value)} /><input className="filter-control" placeholder="Activity" value=${activity} onChange=${(e) => onActivityChange(e.target.value)} /><input className="filter-control" type="datetime-local" value=${observedAt} onChange=${(e) => onObservedAtChange(e.target.value)} /></div>
 
               ${pdfError
                 ? html`
@@ -199,7 +209,7 @@ export function ObservationForm({
                 </button>
               </div>
             </form>
-          `}
+          ` : html`<form className="space-y-5" onSubmit=${onPhotoSubmit}><label className="block"><span className="mb-2 block text-sm font-semibold text-slate-700">Hazard photo</span><input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" className="block w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm" onChange=${(event) => onPhotoSelect(event.target.files?.[0] || null)} /><p className="mt-2 text-xs text-slate-500">${photoFileName || "JPG, PNG, or WEBP up to the configured upload limit."}</p></label><label><span className="filter-label">Reporter description (optional)</span><textarea className="filter-control min-h-28" value=${description} onChange=${(event) => onChange(event.target.value)} placeholder="Worker entered lifting zone during pipe handling."></textarea></label><div className="grid gap-3 sm:grid-cols-3"><input className="filter-control" placeholder="Site" value=${site} onChange=${(e) => onSiteChange(e.target.value)} /><input className="filter-control" placeholder="Activity" value=${activity} onChange=${(e) => onActivityChange(e.target.value)} /><input className="filter-control" type="datetime-local" value=${observedAt} onChange=${(e) => onObservedAtChange(e.target.value)} /></div>${photoError ? html`<div className="error-box">${photoError}</div>` : null}<div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">Image-derived findings require HSE confirmation. The visual model supplies evidence only; the existing SAJAG pipeline decides final SIF risk.</div><button className="primary-button w-full" disabled=${isPhotoLoading}>${isPhotoLoading ? "Analyzing photo…" : "Analyze photo + text"}</button></form>`}
     </section>
   `;
 }
