@@ -1,7 +1,16 @@
 export function resolveApiBaseUrl() {
   const defaultUrl = "http://127.0.0.1:8000";
-  if (typeof window === "undefined") return defaultUrl;
-  return new URLSearchParams(window.location.search).get("api") || defaultUrl;
+  const envUrl = import.meta.env.VITE_API_BASE_URL || "";
+
+  if (typeof window === "undefined") {
+    return envUrl || defaultUrl;
+  }
+
+  return (
+    new URLSearchParams(window.location.search).get("api") ||
+    envUrl ||
+    defaultUrl
+  );
 }
 
 export function actorHeaders() {
