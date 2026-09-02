@@ -2,6 +2,14 @@
 
 Date: 2026-08-30
 
+## Hosted historical-analysis recovery addendum — 2026-09-02
+
+Render showed extraction progress at 100/100 while all analysis rows remained pending because the old progress callback counted only reports extracted; SentenceTransformer initialization, embedding generation, vector persistence, clustering, and the final transaction happened afterward without distinct progress or logs. An interrupted in-process worker also left its persisted job marked `running` indefinitely.
+
+The hosted-demo path now supports `FORCE_HASHING_EMBEDDINGS=true`, which immediately chooses the existing deterministic 384-dimensional hashing model before any SentenceTransformer import or initialization. Historical progress uses an explicit 0–80 extraction, 80–95 embedding/persistence, and 95–100 clustering/finalization scale. The data transaction commits before the job atomically receives its result, `completed` status, and 100/100 progress. Startup marks only orphaned `queued`/`running` jobs failed with a safe-retry message; completed jobs and source reports are unchanged. Render-visible logs bracket every post-extraction phase and terminal job outcome.
+
+Regression coverage proves forced hashing cannot invoke SentenceTransformer, vectors are deterministic and 384-dimensional, ordinary MiniLM selection remains unchanged when available, initialization failure falls back, restart recovery preserves completed jobs, pending reports become analysed, phased historical jobs complete with results, and handler failures persist an error. The final suite for this addendum is recorded in the completion report.
+
 This audit covers the complete Phase 1, Phase 2, and Phase 3A working tree. It follows the recorded baselines in `PRE_CHANGE_AUDIT.md`, `PHASE2_PRE_CHANGE_AUDIT.md`, and `PHASE3A_PRE_CHANGE_AUDIT.md`.
 
 ## Outcome

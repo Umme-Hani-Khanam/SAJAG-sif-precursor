@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import re
 from typing import Iterable
 
@@ -44,6 +45,11 @@ def encode_texts(texts: Iterable[str], force_model: str | None = None) -> tuple[
 
     global _model, _model_unavailable
     values = list(texts)
+    force_hashing = os.getenv("FORCE_HASHING_EMBEDDINGS", "false").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    if force_hashing:
+        return _hashing_encode(values), HASHING_EMBEDDING_MODEL
     if force_model == HASHING_EMBEDDING_MODEL:
         return _hashing_encode(values), HASHING_EMBEDDING_MODEL
 

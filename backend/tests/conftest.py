@@ -12,6 +12,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 os.environ.setdefault("DATABASE_URL", "sqlite:////tmp/sajag-pytest-bootstrap.db")
 os.environ.setdefault("DEMO_MODE", "true")
+os.environ.setdefault("FORCE_HASHING_EMBEDDINGS", "true")
 
 from database import Base, get_db  # noqa: E402
 from models import HistoricalAnalysis, SafetyReport  # noqa: E402

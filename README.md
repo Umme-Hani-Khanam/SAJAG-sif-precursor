@@ -108,6 +108,7 @@ The user-creation script prompts for a password unless one is explicitly supplie
 | `SESSION_TTL_MINUTES` | `60` | Opaque session lifetime, clamped to 5–1440 minutes. |
 | `GEMINI_API_KEY` | unset | Optional Gemini text/photo evidence provider key. |
 | `GEMINI_MODEL` | `gemini-3.6-flash` | Provider model name. |
+| `FORCE_HASHING_EMBEDDINGS` | `false` | Immediately use deterministic 384-dimensional hashing and skip all SentenceTransformer import/download/initialization. Recommended for constrained hosted demos. |
 | `UPLOAD_STORAGE_DIR` | `backend/uploads` | Local evidence storage root. |
 | `MAX_UPLOAD_BYTES` | `10485760` | Per-upload limit; minimum 1 KiB. |
 | `JOB_WORKERS` | `2` | In-process background worker count. |
@@ -248,5 +249,15 @@ The repository does not track `frontend/node_modules`; `npm install` reproduces 
 - Local authentication does not provide enterprise SSO, MFA, login rate limiting, external notification delivery, or SIEM integration.
 - Confidence is evidence quality, not a calibrated probability. Formal metrics are meaningful only when the labelled dataset is representative and independently reviewed.
 - Production deployment must add HTTPS, secure secret management, hardened object storage, durable jobs, observability, retention policy, disaster recovery, and organization-specific model/rule validation.
+
+## Render hosted-demo recovery
+
+Add this exact Render environment variable, then redeploy:
+
+```text
+FORCE_HASHING_EMBEDDINGS=true
+```
+
+At startup, SAJAG marks any `queued` or `running` job left by the previous process as failed with `Interrupted by application restart; safe to retry.` Completed jobs and all safety reports are untouched. After the deployment is healthy, open Reports and start **Analyse Historical Dataset** again. Existing pending reports are analysed in place; the upload is not repeated. Progress now reserves 0–80% for extraction, 80–95% for embeddings/vector persistence, and 95–100% for clustering/final commit. Wait for the job to become `completed` and confirm `/analysis/status` reports the expected analysed count.
 
 See [docs/FINAL_AUDIT.md](docs/FINAL_AUDIT.md) and [docs/FINAL_CHANGES_AND_USAGE.md](docs/FINAL_CHANGES_AND_USAGE.md) for the final evidence and full technical handoff.

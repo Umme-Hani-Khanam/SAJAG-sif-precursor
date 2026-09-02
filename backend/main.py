@@ -44,7 +44,7 @@ from services.capa import add_evidence, assign_capa, capa_to_dict, create_capa, 
 from services.clustering import summarize_clusters
 from services.governance_analytics import critical_control_health, governance_dashboard
 from services.knowledge import document_to_dict, index_document_content, ingest_document, retrieve_guidance, transition_document
-from services.jobs import create_job, job_to_dict, register_handler, submit_persisted_job
+from services.jobs import create_job, job_to_dict, recover_interrupted_jobs, register_handler, submit_persisted_job
 from services.notifications import create_notification, mark_all_read, mark_read, notification_query, notification_to_dict, unread_notification_query
 from services.ocr import extract_pdf_with_fallback
 from services.photo import analyze_photo, combined_description
@@ -123,6 +123,7 @@ def on_startup() -> None:
     seed_default_dataset()
     db = SessionLocal()
     try:
+        recover_interrupted_jobs(db)
         ensure_analysis_records(db)
         db.commit()
     finally:

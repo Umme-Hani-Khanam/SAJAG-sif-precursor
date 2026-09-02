@@ -190,7 +190,7 @@ Migration `0002` enables `vector`, uses 384-dimensional native columns, and crea
 
 ## 39. Environment variables
 
-All supported variables and defaults are listed in the root `README.md`: application/database, demo/auth/session, CORS, Gemini, storage/upload, jobs, similarity, DBSCAN, unmatched-pattern, emerging-risk, and critical-control acceleration configuration. Secrets must come from environment/secret management, never Git.
+All supported variables and defaults are listed in the root `README.md`: application/database, demo/auth/session, CORS, Gemini, storage/upload, jobs, similarity, DBSCAN, unmatched-pattern, emerging-risk, and critical-control acceleration configuration. `FORCE_HASHING_EMBEDDINGS=true` is the constrained hosted-demo switch: it bypasses SentenceTransformer import, download, initialization, and inference and immediately selects the deterministic 384-dimensional hashing model. Secrets must come from environment/secret management, never Git.
 
 ## 40. Complete installation procedure
 
@@ -215,6 +215,8 @@ Scrypt password hashes, opaque token digests, bounded session expiry, inactive/r
 ## 45. Known limitations
 
 The in-process queue and local filesystem are single-process/single-host components. No enterprise SSO/MFA/rate limiter, external email/SMS notification delivery, SIEM integration, malware scanner, or turnkey deployment exists. A live PostgreSQL service was not available in the completion environment. OCR/Gemini require external dependencies. Confidence is not calibrated probability; production requires representative governed validation and operational hardening.
+
+Persisted queued/running jobs cannot be resumed across a process restart because execution is in-process. Startup therefore marks those orphaned records failed/interrupted and makes retry explicit; completed jobs and source reports are never changed by recovery.
 
 ## 46. Future optional enhancements
 

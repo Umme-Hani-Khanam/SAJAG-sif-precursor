@@ -1,3 +1,4 @@
+import logging
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -23,6 +24,9 @@ from services.trends import (
 from services.audit import append_audit
 from services.roles import Actor
 from services.vector_store import get_vector_store
+
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def ensure_analysis_records(db: Session) -> int:
@@ -93,6 +97,8 @@ def batch_analyze(
     prepared = []
     failures = 0
     actor = actor or Actor(name="SAJAG System", role="ADMIN")
+    if progress_callback:
+        progress_callback(0, 100)
     for index, item in enumerate(targets, start=1):
         try:
             values, extraction_model = extract_analysis(item.report.description, prefer_gemini=use_gemini)
@@ -103,11 +109,25 @@ def batch_analyze(
             item.error_message = str(exc)[:1000]
             failures += 1
         if progress_callback:
-            progress_callback(index, len(targets))
+            progress_callback(round(index * 80 / len(targets)), 100)
+
+    logger.info(
+        "Historical extraction finished targets=%s prepared=%s failures=%s",
+        len(targets), len(prepared), failures,
+    )
+    if progress_callback:
+        progress_callback(80, 100)
 
     if prepared:
         texts = [build_embedding_text(item.report.description, values) for item, values, _, _ in prepared]
+        logger.info("Historical embedding generation started count=%s", len(texts))
         vectors, embedding_model = encode_texts(texts)
+        logger.info(
+            "Historical embedding generation finished count=%s model=%s",
+            len(vectors), embedding_model,
+        )
+        if progress_callback:
+            progress_callback(88, 100)
         timestamp = datetime.now(timezone.utc)
         vector_store = get_vector_store(db)
         for (item, values, extraction_model, breakdown), vector in zip(prepared, vectors):
@@ -125,10 +145,24 @@ def batch_analyze(
                 db, actor, "REPORT_ANALYSED", "REPORT", item.report_id,
                 new_value={"sif_score": item.sif_score, "risk_level": item.risk_level, "analysis_version": ANALYSIS_VERSION},
             )
+        logger.info(
+            "Historical vector persistence finished count=%s model=%s",
+            len(prepared), embedding_model,
+        )
+    else:
+        logger.info("Historical embedding generation skipped; no reports required analysis")
+        logger.info("Historical vector persistence finished count=0")
 
     db.flush()
+    if progress_callback:
+        progress_callback(95, 100)
+    logger.info("Historical clustering started")
     recluster(db)
+    logger.info("Historical clustering finished")
+    if progress_callback:
+        progress_callback(99, 100)
     db.commit()
+    logger.info("Historical final commit finished")
     status = analysis_status(db)
     return {
         **status,

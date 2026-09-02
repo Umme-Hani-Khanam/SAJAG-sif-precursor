@@ -1,6 +1,7 @@
 """Persisted job abstraction with a replaceable in-process executor."""
 
 import json
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -9,13 +10,15 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from database import SessionLocal
+from database import SessionLocal, engine
 from models import BackgroundJob
 from services.roles import Actor
 
 
 JobHandler = Callable[[Session, dict, Callable[[int, int], None]], dict | None]
 _HANDLERS: dict[str, JobHandler] = {}
+logger = logging.getLogger("uvicorn.error")
+INTERRUPTED_MESSAGE = "Interrupted by application restart; safe to retry."
 
 
 def register_handler(job_type: str, handler: JobHandler) -> None:
@@ -47,30 +50,83 @@ def create_job(db: Session, actor: Actor, job_type: str, payload: dict | None = 
     return job
 
 
+def recover_interrupted_jobs(db: Session) -> int:
+    """Fail jobs left non-terminal by an earlier API process."""
+
+    jobs = db.query(BackgroundJob).filter(BackgroundJob.status.in_(("queued", "running"))).all()
+    recovered_at = datetime.now(timezone.utc)
+    for job in jobs:
+        previous = job.status
+        job.status = "failed"
+        job.error = INTERRUPTED_MESSAGE
+        job.completed_at = recovered_at
+        logger.warning(
+            "Recovered interrupted job job_id=%s job_type=%s previous_status=%s",
+            job.job_id, job.job_type, previous,
+        )
+    if jobs:
+        db.commit()
+    return len(jobs)
+
+
 def execute_job(db: Session, job: BackgroundJob, handler: JobHandler | None = None) -> BackgroundJob:
     handler = handler or _HANDLERS.get(job.job_type)
     job.status, job.started_at, job.error = "running", datetime.now(timezone.utc), None
     db.commit()
 
     def progress(current: int, total: int) -> None:
-        job.progress_current, job.progress_total = current, total
-        db.commit()
+        current, total = max(0, int(current)), max(0, int(total))
+        if db.get_bind() is not engine or engine.dialect.name == "sqlite":
+            # Isolated tests do not share SessionLocal. SQLite cannot accept a
+            # second writer while the analysis transaction holds its write lock.
+            job.progress_current = min(current, total) if total else current
+            job.progress_total = total
+            db.commit()
+            return
+        progress_db = SessionLocal()
+        try:
+            persisted_job = progress_db.get(BackgroundJob, job.job_id)
+            if persisted_job is not None:
+                persisted_job.progress_current = min(current, total) if total else current
+                persisted_job.progress_total = total
+                progress_db.commit()
+                db.expire(job, ["progress_current", "progress_total"])
+                return
+        finally:
+            progress_db.close()
+
+        raise RuntimeError(f"Persisted job {job.job_id} disappeared while reporting progress.")
 
     try:
         if handler is None:
             raise RuntimeError(f"No handler is registered for {job.job_type}.")
         result = handler(db, json.loads(job.payload or "{}"), progress) or {}
+        db.refresh(job)
         job.result = json.dumps(result, default=str)
         job.status = "completed"
-        if not job.progress_total:
+        if job.job_type == "HISTORICAL_ANALYSIS" and job.progress_total == 100 and job.progress_current >= 99:
+            job.progress_current = job.progress_total = 100
+        elif not job.progress_total:
             job.progress_current = job.progress_total = 1
+        job.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        if job.job_type == "HISTORICAL_ANALYSIS":
+            logger.info("Historical job completed job_id=%s", job.job_id)
+        else:
+            logger.info("Job completed job_id=%s job_type=%s", job.job_id, job.job_type)
     except Exception as exc:
         db.rollback()
         job = db.get(BackgroundJob, job.job_id)
+        if job is None:
+            raise
         job.status = "failed"
         job.error = f"{type(exc).__name__}: {str(exc)}"[:1000]
-    job.completed_at = datetime.now(timezone.utc)
-    db.commit()
+        job.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        if job.job_type == "HISTORICAL_ANALYSIS":
+            logger.exception("Historical job failed job_id=%s", job.job_id)
+        else:
+            logger.exception("Job failed job_id=%s job_type=%s", job.job_id, job.job_type)
     return job
 
 

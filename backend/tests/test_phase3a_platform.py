@@ -1,3 +1,4 @@
+import builtins
 import json
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -15,8 +16,9 @@ import main
 from database import get_db
 from models import BackgroundJob, HistoricalAnalysis, SafetyDocument, SafetyReport
 from services.auth import create_session, create_user
+from services import embeddings
 from services.confidence import assess_confidence
-from services.jobs import create_job, execute_job
+from services.jobs import INTERRUPTED_MESSAGE, create_job, execute_job, recover_interrupted_jobs
 from services.knowledge import ingest_document, retrieve_guidance, transition_document
 from services.notifications import create_notification, mark_all_read, mark_read, notification_query, notification_read_at, unread_notification_query
 from services.ocr import OCRProvider, extract_pdf_with_fallback
@@ -139,6 +141,105 @@ def test_sqlite_vector_search_and_postgres_adapter_contract(db_session):
     assert PostgresVectorStore._literal(vector) == "[1,0,0]"
 
 
+def test_force_hashing_embeddings_never_imports_sentence_transformers_and_is_deterministic(monkeypatch):
+    monkeypatch.setenv("FORCE_HASHING_EMBEDDINGS", "true")
+    original_import = builtins.__import__
+
+    def guarded_import(name, *args, **kwargs):
+        if name.startswith("sentence_transformers"):
+            raise AssertionError("SentenceTransformer must not be imported in forced hashing mode")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    first, first_model = embeddings.encode_texts(["Suspended load exclusion zone"])
+    second, second_model = embeddings.encode_texts(["Suspended load exclusion zone"])
+    assert first_model == second_model == embeddings.HASHING_EMBEDDING_MODEL
+    assert first.shape == second.shape == (1, 384)
+    assert np.array_equal(first, second)
+
+
+def test_default_embedding_path_and_failed_model_initialization_keep_hashing_fallback(monkeypatch):
+    monkeypatch.delenv("FORCE_HASHING_EMBEDDINGS", raising=False)
+
+    class AvailableModel:
+        def encode(self, values, **_kwargs):
+            return np.ones((len(values), 384), dtype=np.float32)
+
+    monkeypatch.setattr(embeddings, "_model", AvailableModel())
+    monkeypatch.setattr(embeddings, "_model_unavailable", False)
+    vectors, model = embeddings.encode_texts(["default path"])
+    assert model == embeddings.MINILM_MODEL
+    assert vectors.shape == (1, 384)
+
+    original_import = builtins.__import__
+
+    def failing_import(name, *args, **kwargs):
+        if name.startswith("sentence_transformers"):
+            raise RuntimeError("model initialization failed")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(embeddings, "_model", None)
+    monkeypatch.setattr(embeddings, "_model_unavailable", False)
+    monkeypatch.setattr(builtins, "__import__", failing_import)
+    fallback, fallback_model = embeddings.encode_texts(["fallback path"])
+    assert fallback_model == embeddings.HASHING_EMBEDDING_MODEL
+    assert fallback.shape == (1, 384)
+    assert embeddings._model_unavailable is True
+
+
+def test_restart_recovery_fails_only_orphaned_jobs(db_session):
+    actor = Actor("Manager", "HSE_MANAGER", user_id="MANAGER")
+    running = create_job(db_session, actor, "HISTORICAL_ANALYSIS")
+    queued = create_job(db_session, actor, "OCR_PROCESSING")
+    completed = create_job(db_session, actor, "DOCUMENT_INDEXING")
+    running.status = "running"
+    queued.status = "queued"
+    completed.status = "completed"
+    completed.result = json.dumps({"done": True})
+    db_session.commit()
+
+    assert recover_interrupted_jobs(db_session) == 2
+    assert running.status == queued.status == "failed"
+    assert running.error == queued.error == INTERRUPTED_MESSAGE
+    assert running.completed_at and queued.completed_at
+    assert completed.status == "completed"
+    assert json.loads(completed.result) == {"done": True}
+
+
+def test_historical_job_uses_phased_progress_and_completes_pending_report(db_session, monkeypatch):
+    monkeypatch.setenv("FORCE_HASHING_EMBEDDINGS", "true")
+    item = report("HOSTED-1", "Site A")
+    db_session.add(item)
+    actor = Actor("Manager", "HSE_MANAGER", user_id="MANAGER", site_scope=("Site A",), authenticated=True)
+    job = create_job(db_session, actor, "HISTORICAL_ANALYSIS")
+    db_session.commit()
+    progress_events = []
+
+    def handler(db, _payload, progress):
+        def record_progress(current, total):
+            progress_events.append((current, total))
+            progress(current, total)
+
+        return main.batch_analyze(
+            db, actor=actor, site_scope=actor.site_scope,
+            progress_callback=record_progress,
+        )
+
+    completed = execute_job(db_session, job, handler)
+    db_session.refresh(item.analysis)
+    assert item.analysis.status == "analysed"
+    assert item.analysis.embedding_model == embeddings.HASHING_EMBEDDING_MODEL
+    assert completed.status == "completed"
+    assert completed.error is None
+    assert completed.progress_current == completed.progress_total == 100
+    assert json.loads(completed.result)["analysed"] == 1
+    assert progress_events[0] == (0, 100)
+    assert progress_events[-1] == (99, 100)
+    assert all(total == 100 for _, total in progress_events)
+    assert [current for current, _ in progress_events] == sorted(current for current, _ in progress_events)
+    assert {80, 88, 95, 99}.issubset({current for current, _ in progress_events})
+
+
 def test_job_lifecycle_progress_and_failure(db_session):
     actor = Actor("Manager", "HSE_MANAGER")
     success = create_job(db_session, actor, "HISTORICAL_ANALYSIS")
@@ -147,7 +248,7 @@ def test_job_lifecycle_progress_and_failure(db_session):
     assert success.status == "completed" and success.progress_current == 2 and json.loads(success.result)["done"]
     assert success.started_at and success.completed_at
 
-    failure = create_job(db_session, actor, "OCR_PROCESSING")
+    failure = create_job(db_session, actor, "HISTORICAL_ANALYSIS")
     db_session.commit()
     execute_job(db_session, failure, lambda *_: (_ for _ in ()).throw(RuntimeError("controlled failure")))
     assert failure.status == "failed" and "controlled failure" in failure.error and failure.completed_at
