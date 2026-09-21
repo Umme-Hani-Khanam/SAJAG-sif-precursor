@@ -213,6 +213,14 @@ Confidence is not a calibrated probability and never changes SIF risk.
 
 Formal validation compares labelled expected results with a fresh pipeline run. Exact precursor match is TP; mismatch contributes FP and FN. Precision is `TP/(TP+FP)`, recall is `TP/(TP+FN)`, and F1 is their harmonic mean. High/Critical false-negative rate measures expected High/Critical cases predicted below High. Risk exact/adjacent agreement and critical-control agreement are also reported. This is distinct from HSE agreement analytics, which compare operational reviewer corrections with original AI outputs.
 
+The canonical validation CSV headers are:
+
+```text
+description,expected_hazard,expected_exposure,expected_critical_control,expected_precursor,expected_risk_level
+```
+
+`expected_control` is accepted as a backward-compatible alias for `expected_critical_control`. Header casing, a UTF-8 BOM, and surrounding header whitespace are normalized. If both control columns are supplied, their non-empty values must agree row by row. The Validation page also provides a downloadable canonical template.
+
 ## Verification
 
 ```bash

@@ -63,7 +63,7 @@ from services.confidence import assess_confidence
 from services.roles import Actor, get_actor, has_permission, permission_matrix, require, require_site, scoped_sites
 from services.storage import LocalFileStorage, attachment_to_dict, save_attachment, validate_file
 from services.trends import analytics_series, cluster_trend, emerging_cluster_patterns, parse_report_date, report_event_date, trend_anchor
-from services.validation import GROUND_TRUTH_COLUMNS, run_to_dict, run_validation
+from services.validation import ValidationSchemaError, normalize_validation_frame, run_to_dict, run_validation
 
 
 APP_NAME = os.getenv("APP_NAME", "SAJAG SIF Precursor Intelligence API")
@@ -87,14 +87,14 @@ COLUMN_MAPPING = {
     "Site": "site", "Description": "description",
 }
 EXPORT_COLUMNS = [
-    ("Report ID", "report_id"), ("Date", "date"), ("Site", "site"),
+    ("Report ID", "report_id"), ("Date", "date"), ("Effective Event Date", "effective_event_date"), ("Site", "site"),
     ("Department", "department"), ("Activity", "activity"), ("Description", "description"),
     ("Hazard", "hazard"), ("Energy Source", "energy_source"), ("Exposure Type", "exposure_type"),
     ("Unsafe Act", "unsafe_act"), ("Unsafe Condition", "unsafe_condition"),
     ("Critical Control", "critical_control"), ("Control Status", "control_status"),
     ("Potential Consequence", "potential_consequence"), ("Likelihood", "likelihood"),
     ("Precursor", "precursor_pattern"), ("SIF Score", "sif_score"),
-    ("Risk Level", "risk_level"), ("Cluster ID", "cluster_id"), ("Analysis Status", "status"),
+    ("Risk Level", "risk_level"), ("Cluster ID", "cluster_id"), ("Cluster", "cluster_code"), ("Analysis Status", "status"),
 ]
 
 @asynccontextmanager
@@ -1299,9 +1299,10 @@ def upload_validation_dataset(
         frame = pd.read_csv(BytesIO(content), dtype=str, keep_default_na=False, na_filter=False)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Validation CSV could not be parsed.") from exc
-    missing = [column for column in GROUND_TRUTH_COLUMNS if column not in frame.columns]
-    if missing:
-        raise HTTPException(status_code=400, detail={"message": "Validation CSV is missing ground-truth columns.", "missing_columns": missing})
+    try:
+        frame = normalize_validation_frame(frame)
+    except ValidationSchemaError as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
     dataset = ValidationDataset(
         dataset_id=f"VDS-{uuid4().hex[:16].upper()}", name=name.strip(),
         description=description.strip() or None, created_by=actor.name, case_count=len(frame.index),
@@ -1428,9 +1429,10 @@ def export_reports_csv(
     writer = csv.writer(output)
     writer.writerow([label for label, _ in EXPORT_COLUMNS])
     for item in items:
-        report_values = vars(item.report)
-        analysis_values = vars(item)
-        writer.writerow([report_values.get(field, analysis_values.get(field, "")) for _, field in EXPORT_COLUMNS])
+        writer.writerow([
+            getattr(item.report, field, getattr(item, field, ""))
+            for _, field in EXPORT_COLUMNS
+        ])
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]), media_type="text/csv",

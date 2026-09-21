@@ -1,25 +1,32 @@
 import React from "react";
-import { getDashboardMetrics, getReports, getTrends } from "../api/reports.js";
+import { getClusters, getDashboardMetrics, getReports, getTrends } from "../api/reports.js";
 import { html } from "../ui.js";
 import { PageTitle } from "./AnalyzePage.js";
 import { getCriticalControls } from "../api/governance.js";
+
+const EMPTY_FILTERS = { date_from: "", date_to: "", site: "", department: "", activity: "", risk_level: "", precursor: "", cluster_id: "" };
 
 export function DashboardPage() {
   const [metrics, setMetrics] = React.useState(null);
   const [trends, setTrends] = React.useState(null);
   const [reports, setReports] = React.useState([]);
-  const [filters, setFilters] = React.useState({ date_from: "", date_to: "", site: "", risk_level: "", precursor: "", cluster_id: "" });
+  const [filters, setFilters] = React.useState({ ...EMPTY_FILTERS });
+  const [appliedFilters, setAppliedFilters] = React.useState({ ...EMPTY_FILTERS });
   const [error, setError] = React.useState("");
   const [controls, setControls] = React.useState([]);
+  const [clusters, setClusters] = React.useState([]);
 
   React.useEffect(() => {
-    Promise.all([getDashboardMetrics(), getTrends(filters), getReports(), getCriticalControls()])
-      .then(([m, t, r, c]) => { setMetrics(m); setTrends(t); setReports(r); setControls(c.controls || []); setError(""); })
+    Promise.all([getDashboardMetrics(), getTrends(EMPTY_FILTERS), getReports(), getCriticalControls(), getClusters()])
+      .then(([m, t, r, c, nextClusters]) => { setMetrics(m); setTrends(t); setReports(r); setControls(c.controls || []); setClusters(nextClusters); setError(""); })
       .catch((err) => setError(err.message));
   }, []);
 
   async function applyFilters() {
-    try { setTrends(await getTrends(filters)); setError(""); } catch (err) { setError(err.message); }
+    try { const next = { ...filters }; setTrends(await getTrends(next)); setAppliedFilters(next); setError(""); } catch (err) { setError(err.message); }
+  }
+  async function clearFilters() {
+    try { const next = { ...EMPTY_FILTERS }; setFilters(next); setTrends(await getTrends(next)); setAppliedFilters(next); setError(""); } catch (err) { setError(err.message); }
   }
 
   if (!metrics) return html`<div className="panel">${error || "Loading live dashboard…"}</div>`;
@@ -32,7 +39,6 @@ export function DashboardPage() {
   const departments = unique(reports.map((r) => r.department));
   const activities = unique(reports.map((r) => r.activity));
   const precursors = unique(reports.map((r) => r.analysis?.precursor_pattern));
-  const clusters = unique(reports.map((r) => r.analysis?.cluster_id).filter((v) => v !== null && v >= 0));
 
   return html`
     <div className="space-y-6">
@@ -66,7 +72,7 @@ export function DashboardPage() {
       ].map(([label, value], index) => html`<div className="rounded-xl bg-slate-50 p-3" key=${label}><p className="text-xl font-bold">${value === null || value === undefined ? "—" : index > 0 && index < 5 ? `${value}%` : value}</p><p className="text-xs text-slate-500">${label}</p></div>`)}</div></section>
 
       <section className="panel">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"><div><p className="eyebrow">REAL-TIME FILTERS</p><h2 className="mt-2 text-xl font-semibold">Trend analysis</h2></div><button className="primary-button" onClick=${applyFilters}>Apply filters</button></div>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"><div><p className="eyebrow">REAL-TIME FILTERS</p><h2 className="mt-2 text-xl font-semibold">Trend analysis</h2><p className="mt-1 text-xs text-slate-500">Active effective date range: ${activeDateRange(appliedFilters)}</p></div><button className="primary-button" onClick=${applyFilters}>Apply filters</button></div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           <${FilterInput} label="From" type="date" value=${filters.date_from} onChange=${(v) => setFilters({ ...filters, date_from: v })} />
           <${FilterInput} label="To" type="date" value=${filters.date_to} onChange=${(v) => setFilters({ ...filters, date_to: v })} />
@@ -75,8 +81,8 @@ export function DashboardPage() {
           <${FilterSelect} label="Activity" value=${filters.activity || ""} values=${activities} onChange=${(v) => setFilters({ ...filters, activity: v })} />
           <${FilterSelect} label="Risk" value=${filters.risk_level} values=${["low", "medium", "high", "critical"]} onChange=${(v) => setFilters({ ...filters, risk_level: v })} />
           <${FilterSelect} label="Precursor" value=${filters.precursor} values=${precursors} onChange=${(v) => setFilters({ ...filters, precursor: v })} />
-          <${FilterSelect} label="Cluster" value=${filters.cluster_id} values=${clusters} format=${(v) => `C-${Number(v) + 1}`} onChange=${(v) => setFilters({ ...filters, cluster_id: v })} />
-          <button className="secondary-button self-end" onClick=${() => { setFilters({ date_from: "", date_to: "", site: "", department: "", activity: "", risk_level: "", precursor: "", cluster_id: "" }); }}>Clear</button>
+          <${ClusterSelect} value=${filters.cluster_id} clusters=${clusters} onChange=${(v) => setFilters({ ...filters, cluster_id: v })} />
+          <button className="secondary-button self-end" onClick=${clearFilters}>Clear</button>
         </div>
         <${TrendVisuals} trends=${trends} />
       </section>
@@ -110,4 +116,11 @@ function FrequencyBars({ title, rows = [] }) {
 
 function FilterInput({ label, type = "text", value, onChange }) { return html`<label><span className="filter-label">${label}</span><input className="filter-control" type=${type} value=${value} onChange=${(e) => onChange(e.target.value)} /></label>`; }
 function FilterSelect({ label, value, values, onChange, format = (v) => v }) { return html`<label><span className="filter-label">${label}</span><select className="filter-control" value=${value} onChange=${(e) => onChange(e.target.value)}><option value="">All</option>${values.map((v) => html`<option key=${v} value=${v}>${format(v)}</option>`)}</select></label>`; }
+function ClusterSelect({ value, clusters, onChange }) { return html`<label><span className="filter-label">Established cluster</span><select className="filter-control" value=${value} onChange=${(e) => onChange(e.target.value)}><option value="">All</option>${clusters.map((cluster) => html`<option key=${cluster.cluster_id} value=${cluster.cluster_id}>${cluster.cluster_code}</option>`)}</select></label>`; }
 function unique(values) { return [...new Set(values.filter((v) => v !== "" && v !== null && v !== undefined))].sort(); }
+function activeDateRange(filters) {
+  if (filters.date_from && filters.date_to) return `${filters.date_from} through ${filters.date_to} (inclusive)`;
+  if (filters.date_from) return `from ${filters.date_from} (inclusive)`;
+  if (filters.date_to) return `through ${filters.date_to} (inclusive)`;
+  return "all dates";
+}

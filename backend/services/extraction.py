@@ -44,12 +44,34 @@ def heuristic_analysis(description: str) -> dict[str, str]:
     vehicle = _contains(text, "vehicle", "reversing", "forklift", "traffic", "mobile equipment")
     machinery = _contains(text, "rotating", "machine", "pinch point", "unguarded")
     hot_work = _contains(text, "hot work", "welding", "spark", "flammable")
+    explicit_low_energy = _contains(text, "no hazardous energy", "no high-energy exposure", "no high energy exposure")
+    housekeeping = _contains(text, "cardboard box", "housekeeping", "clutter", "debris in the walkway", "box was left in a walkway")
+    minor_water_spill = _contains(text, "minor water spill", "small water spill")
 
-    missing = _contains(text, "without", "missing", "lacked", "no ", "not wearing", "bypassed", "failed")
+    missing = _contains(
+        text,
+        "without", "missing", "lacked", "not wearing", "bypassed", "failed",
+        "not connected", "disconnected", "controls were lost", "control was lost",
+        "no guardrail", "no harness", "no barricade", "no isolation", "no permit",
+        "no gas test", "no respiratory protection", "no lockout", "no loto", "no exclusion zone",
+    )
     degraded = _contains(text, "inadequate", "improper", "damaged", "potential leak", "not fully")
     status = "missing" if missing else "degraded" if degraded else "unknown"
 
-    if height and load:
+    if explicit_low_energy and (housekeeping or minor_water_spill):
+        is_spill = minor_water_spill
+        values = {
+            "hazard": "Minor housekeeping spill" if is_spill else "Housekeeping obstruction",
+            "energy_source": "Low-energy surface condition" if is_spill else "Low-energy pedestrian movement",
+            "exposure_type": "Slip exposure" if is_spill else "Trip exposure",
+            "critical_control": "Prompt spill cleanup" if is_spill else "Clear walkways and prompt housekeeping",
+            "potential_consequence": "Minor injury",
+            "likelihood": "low",
+            "precursor_pattern": "Minor surface contamination" if is_spill else "Housekeeping obstruction",
+            "life_saving_rule": "Maintain clean and unobstructed access routes",
+        }
+        status = "degraded"
+    elif height and load:
         values = {
             "hazard": "Work at height and suspended load",
             "energy_source": "Gravity and suspended-load mechanical energy",

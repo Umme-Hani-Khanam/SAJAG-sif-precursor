@@ -29,8 +29,17 @@ export async function parseResponse(response) {
   try { payload = await response.json(); } catch { payload = null; }
   if (!response.ok) {
     const detail = payload?.detail;
-    const message = typeof detail === "string" ? detail : detail?.message;
-    throw new Error(message || "The request could not be completed.");
+    const parts = [typeof detail === "string" ? detail : detail?.message];
+    if (detail?.missing_columns?.length) parts.push(`Missing: ${detail.missing_columns.join(", ")}.`);
+    if (detail?.required_columns?.length) parts.push(`Required: ${detail.required_columns.join(", ")}.`);
+    if (detail?.accepted_aliases && Object.keys(detail.accepted_aliases).length) {
+      parts.push(`Accepted aliases: ${Object.entries(detail.accepted_aliases).map(([alias, canonical]) => `${alias} → ${canonical}`).join(", ")}.`);
+    }
+    if (detail?.received_columns?.length) parts.push(`Received: ${detail.received_columns.join(", ")}.`);
+    if (detail?.conflict_rows?.length) parts.push(`Conflicting CSV rows: ${detail.conflict_rows.join(", ")}.`);
+    const error = new Error(parts.filter(Boolean).join(" ") || "The request could not be completed.");
+    error.detail = detail;
+    throw error;
   }
   return payload;
 }

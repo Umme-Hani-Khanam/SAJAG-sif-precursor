@@ -22,6 +22,7 @@ class HistoricalAnalysisResponse(BaseModel):
     sif_score: float | None = None
     risk_level: str | None = None
     cluster_id: int | None = None
+    cluster_code: str | None = None
     analysis_timestamp: datetime | None = None
     extraction_model: str | None = None
     embedding_model: str | None = None
@@ -67,6 +68,7 @@ class SafetyReportResponse(BaseModel):
     site: str
     description: str
     observed_at: datetime | None = None
+    effective_event_date: str | None = None
     submitted_at: datetime | None = None
     confidence_label: str | None = None
     confidence_reasons: str | None = None

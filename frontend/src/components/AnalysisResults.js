@@ -67,7 +67,7 @@ export function AnalysisResults({ result, historicalReportCount = 0, actor }) {
 
           <div className="mt-4 space-y-3">
             ${buildRiskItems(result).map((item) => html`
-              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="rounded-2xl bg-slate-50 px-4 py-3" key=${item.label}>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   ${item.label}
                 </p>
@@ -137,7 +137,7 @@ export function AnalysisResults({ result, historicalReportCount = 0, actor }) {
           )}
 
           <div className="border-t border-slate-200 pt-4">
-            <ScoreRow
+            <${ScoreRow}
               label="TOTAL"
               value=${breakdown.total}
               max=${100}
@@ -227,6 +227,7 @@ function GuidanceAndMemory({ result }) {
   const guidance = result.grounded_guidance || { recommended_action: "No approved safety reference was retrieved.", retrieved_sources: [] };
   const recommendation = result.role_recommendation;
   return html`
+    <div className="space-y-5">
     <section className="grid gap-5 lg:grid-cols-2">
       <article className="rounded-[1.75rem] border border-cyan-100 bg-cyan-50/60 p-5">
         <p className="eyebrow">GROUNDED SAFETY GUIDANCE</p><h3 className="mt-2 font-bold">Suggested safety action</h3>
@@ -240,6 +241,7 @@ function GuidanceAndMemory({ result }) {
       </article>
     </section>
     ${result.historical_actions?.length ? html`<section className="rounded-[1.75rem] border border-emerald-200 bg-emerald-50/50 p-5"><p className="eyebrow">PREVIOUSLY USED CORRECTIVE ACTIONS</p><p className="mt-2 text-sm text-slate-600">Verified actions from similar incidents are suggestions only and are never applied automatically.</p><div className="mt-4 space-y-3">${result.historical_actions.map((action) => html`<article className="rounded-xl bg-white p-4" key=${action.capa_id}><div className="flex justify-between gap-3"><b className="text-sm">${action.title}</b><span className="text-xs font-bold text-emerald-700">${action.related_percent}% related</span></div><p className="mt-2 text-sm text-slate-700">${action.action}</p><p className="mt-2 text-xs text-slate-500">Report ${action.report_id} · ${action.outcome} · ${action.verified_by}</p></article>`)}</div></section>` : null}
+    </div>
   `;
 }
 

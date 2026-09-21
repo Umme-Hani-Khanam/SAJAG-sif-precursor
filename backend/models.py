@@ -46,6 +46,13 @@ class SafetyReport(Base):
     capas = relationship("CAPA", back_populates="report")
     alerts = relationship("SafetyAlert", back_populates="report")
 
+    @property
+    def effective_event_date(self) -> str | None:
+        from services.trends import report_event_date
+
+        parsed = report_event_date(self)
+        return parsed.isoformat() if parsed else None
+
 
 class HistoricalAnalysis(Base):
     """Persisted intelligence derived once from an immutable source report."""
@@ -91,6 +98,12 @@ class HistoricalAnalysis(Base):
     )
 
     report = relationship("SafetyReport", back_populates="analysis")
+
+    @property
+    def cluster_code(self) -> str | None:
+        from services.clustering import cluster_display_label
+
+        return cluster_display_label(self.cluster_id)
 
 
 class HSEReview(Base):

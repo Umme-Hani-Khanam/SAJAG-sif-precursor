@@ -8,6 +8,19 @@ from services.config import CLUSTER_ASSIGNMENT_MIN_SIMILARITY, DBSCAN_EPS, DBSCA
 from services.embeddings import cosine_score, deserialize_embedding
 
 
+UNCLASSIFIED_CLUSTER_LABEL = "Unclassified / noise"
+
+
+def cluster_display_label(cluster_id: int | None) -> str | None:
+    """Return the single public label for a persisted cluster identifier."""
+
+    if cluster_id is None:
+        return None
+    if cluster_id < 0:
+        return UNCLASSIFIED_CLUSTER_LABEL
+    return f"C-{cluster_id + 1:02d}"
+
+
 def dbscan_cosine(
     vectors: np.ndarray,
     eps: float = DBSCAN_EPS,
@@ -110,7 +123,7 @@ def summarize_clusters(analyses: list[Any]) -> list[dict]:
         summaries.append(
             {
                 "cluster_id": cluster_id,
-                "cluster_code": f"C-{cluster_id + 1:02d}",
+                "cluster_code": cluster_display_label(cluster_id),
                 "cluster_name": cluster_name(items),
                 "report_count": len(items),
                 "first_seen": dates[0] if dates else "",
@@ -182,7 +195,7 @@ def assign_to_cluster(query_vector: np.ndarray, analyses: list[Any], embedding_m
     items = group_items[cluster_id]
     return {
         "cluster_id": cluster_id,
-        "cluster_code": f"C-{cluster_id + 1:02d}",
+        "cluster_code": cluster_display_label(cluster_id),
         "cluster_name": cluster_name(items),
         "assignment_similarity_percent": round(score * 100, 1),
     }
