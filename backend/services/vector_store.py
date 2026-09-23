@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from datetime import datetime
 
-from sqlalchemy import text
+from sqlalchemy import String, bindparam, text
 from sqlalchemy.orm import Session
 
 from models import DocumentChunk, HistoricalAnalysis, SafetyDocument
@@ -80,6 +80,9 @@ class PostgresVectorStore(VectorStore):
           AND (:observed_date IS NULL OR sd.effective_date IS NULL OR sd.effective_date = '' OR sd.effective_date <= :observed_date)
         ORDER BY dc.embedding_vector <=> CAST(:query_vector AS vector) LIMIT :limit
     """
+    DOCUMENT_SEARCH_STATEMENT = text(DOCUMENT_SEARCH_SQL).bindparams(
+        bindparam("observed_date", type_=String),
+    )
     REPORT_SEARCH_SQL = """
         SELECT report_id, 1 - (embedding_vector <=> CAST(:query_vector AS vector)) AS score
         FROM historical_analyses WHERE status = 'analysed' AND embedding_model = :model
@@ -105,7 +108,7 @@ class PostgresVectorStore(VectorStore):
         return [(float(row.score), db.get(HistoricalAnalysis, row.report_id)) for row in rows]
 
     def search_document_chunks(self, db, vector, model, limit=4, observed_at=None):
-        rows = db.execute(text(self.DOCUMENT_SEARCH_SQL), {
+        rows = db.execute(self.DOCUMENT_SEARCH_STATEMENT, {
             "query_vector": self._literal(vector), "model": model, "limit": limit,
             "observed_date": observed_at.date().isoformat() if observed_at else None,
         }).all()
